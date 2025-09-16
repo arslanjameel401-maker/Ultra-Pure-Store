@@ -1,1 +1,340 @@
+# E-Commerce App Starter — React Native (Expo) + Firebase
+
+
+## Overview (Urdu)
+Yeh starter project React Native (Expo) aur Firebase (Firestore + Auth + Storage) par mabni hai. Isay aap customize karke full-featured E-commerce app bana sakte hain. Main ne basic screens aur functionality de di hai: Signup/Login, Product listing (Firestore se), Product detail, Cart, aur Order create (Firestore mein).
+
+---
+
+## Fast Start (Instructions)
+1. Install Expo CLI: `npm install -g expo-cli`
+2. Create project folder and place files from below.
+3. `npm install` then `expo start`.
+4. Create a Firebase project and enable Firestore, Authentication (Email/Password), and Storage. Copy config into `firebase.js`.
+
+
+---
+
+## package.json
+```json
+{
+  "name": "ecommerce-starter",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "expo": "~48.0.0",
+    "expo-status-bar": "~1.4.0",
+    "react": "18.2.0",
+    "react-native": "0.71.8",
+    "@react-navigation/native": "^6.0.13",
+    "@react-navigation/native-stack": "^6.9.0",
+    "react-native-gesture-handler": "^2.9.0",
+    "react-native-safe-area-context": "^4.5.0",
+    "react-native-screens": "^3.20.0",
+    "firebase": "^9.23.0"
+  }
+}
+```
+
+---
+
+## firebase.js
+Replace the config placeholders with your Firebase project's config.
+```js
+// firebase.js
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+```
+
+---
+
+## App.js (Main)
+```js
+// App.js
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import HomeScreen from './screens/HomeScreen';
+import ProductDetail from './screens/ProductDetail';
+import CartScreen from './screens/CartScreen';
+import AuthScreen from './screens/AuthScreen';
+
+const Stack = createNativeStackNavigator();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Auth">
+        <Stack.Screen name="Auth" component={AuthScreen} options={{headerShown:false}} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{title:'Shop'}} />
+        <Stack.Screen name="ProductDetail" component={ProductDetail} options={{title:'Product'}} />
+        <Stack.Screen name="Cart" component={CartScreen} options={{title:'Cart'}} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+```
+
+---
+
+## screens/AuthScreen.js
+Simple Email/Password signup & login using Firebase Auth.
+```js
+// screens/AuthScreen.js
+import React, {useState, useEffect} from 'react';
+import {View, Text, TextInput, Button, Alert, StyleSheet} from 'react-native';
+import { auth } from '../firebase';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
+
+export default function AuthScreen({navigation}){
+  const [email,setEmail] = useState('');
+  const [password,setPassword] = useState('');
+
+  useEffect(()=>{
+    const unsub = onAuthStateChanged(auth, user => {
+      if(user) navigation.replace('Home');
+    });
+    return unsub;
+  },[]);
+
+  const signup = async ()=>{
+    try{
+      await createUserWithEmailAndPassword(auth,email,password);
+    }catch(e){ Alert.alert('Error', e.message); }
+  }
+
+  const login = async ()=>{
+    try{ await signInWithEmailAndPassword(auth,email,password); }
+    catch(e){ Alert.alert('Error', e.message); }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Welcome to Arman Studio Shop</Text>
+      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+      <TextInput placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} style={styles.input} />
+      <View style={{marginTop:10}}>
+        <Button title="Login" onPress={login} />
+      </View>
+      <View style={{marginTop:10}}>
+        <Button title="Sign up" onPress={signup} />
+      </View>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  container:{flex:1,justifyContent:'center',padding:20},
+  title:{fontSize:20,marginBottom:20,textAlign:'center'},
+  input:{borderWidth:1,borderColor:'#ccc',padding:10,marginBottom:10,borderRadius:6}
+});
+```
+
+---
+
+## screens/HomeScreen.js
+Shows product list from Firestore.
+```js
+// screens/HomeScreen.js
+import React, {useEffect, useState} from 'react';
+import {View, Text, FlatList, Image, TouchableOpacity, StyleSheet, ActivityIndicator, Button} from 'react-native';
+import { db, auth } from '../firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+
+export default function HomeScreen({navigation}){
+  const [products,setProducts] = useState([]);
+  const [loading,setLoading] = useState(true);
+
+  useEffect(()=>{
+    const load = async ()=>{
+      try{
+        const snapshot = await getDocs(collection(db,'products'));
+        const list = snapshot.docs.map(d => ({id:d.id, ...d.data()}));
+        setProducts(list);
+      }catch(e){ console.log(e); }
+      setLoading(false);
+    }
+    load();
+  },[]);
+
+  if(loading) return <ActivityIndicator style={{flex:1}} />
+
+  return (
+    <View style={{flex:1,padding:10}}>
+      <Button title="Cart" onPress={()=>navigation.navigate('Cart')} />
+      <Button title="Logout" onPress={()=>signOut(auth)} />
+      <FlatList
+        data={products}
+        keyExtractor={i=>i.id}
+        renderItem={({item})=> (
+          <TouchableOpacity style={styles.card} onPress={()=>navigation.navigate('ProductDetail',{product:item})}>
+            <Image source={{uri:item.image}} style={styles.img} />
+            <View style={{flex:1, paddingLeft:10}}>
+              <Text style={{fontWeight:'bold'}}>{item.name}</Text>
+              <Text>Rs {item.price}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  card:{flexDirection:'row',padding:10,borderWidth:1,borderColor:'#ddd',borderRadius:8,marginBottom:10,alignItems:'center'},
+  img:{width:80,height:80,borderRadius:6}
+});
+```
+
+---
+
+## screens/ProductDetail.js
+Simple product detail and Add to Cart (local state via React Context suggested). For simplicity we pass cart via navigation params or use a small Context implementation (below we use a simple global cart module).
+```js
+// screens/ProductDetail.js
+import React from 'react';
+import {View, Text, Image, Button, StyleSheet, Alert} from 'react-native';
+import Cart from '../utils/cart';
+
+export default function ProductDetail({route,navigation}){
+  const {product} = route.params;
+
+  const addToCart = ()=>{
+    Cart.add(product);
+    Alert.alert('Added','Product added to cart');
+  }
+
+  return (
+    <View style={{flex:1,padding:20}}>
+      <Image source={{uri:product.image}} style={{width:'100%',height:300,borderRadius:8}} />
+      <Text style={{fontSize:20,fontWeight:'bold',marginTop:10}}>{product.name}</Text>
+      <Text style={{fontSize:18,marginTop:6}}>Rs {product.price}</Text>
+      <Text style={{marginTop:10}}>{product.description}</Text>
+      <View style={{marginTop:20}}>
+        <Button title="Add to Cart" onPress={addToCart} />
+      </View>
+    </View>
+  )
+}
+```
+
+---
+
+## utils/cart.js
+A tiny in-memory cart. For production use Context or Redux + persistent storage.
+```js
+// utils/cart.js
+let items = [];
+export default {
+  add(product){
+    const found = items.find(i=>i.id===product.id);
+    if(found) found.qty += 1;
+    else items.push({...product, qty:1});
+  },
+  get(){ return items; },
+  clear(){ items = []; }
+}
+```
+
+---
+
+## screens/CartScreen.js
+Displays cart and creates an order in Firestore.
+```js
+// screens/CartScreen.js
+import React, {useState} from 'react';
+import {View, Text, FlatList, Button, Alert} from 'react-native';
+import Cart from '../utils/cart';
+import { db, auth } from '../firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+export default function CartScreen(){
+  const [loading,setLoading] = useState(false);
+  const items = Cart.get();
+  const total = items.reduce((s,i)=>s + i.price * i.qty, 0);
+
+  const placeOrder = async ()=>{
+    if(items.length===0) return Alert.alert('Cart is empty');
+    setLoading(true);
+    try{
+      await addDoc(collection(db,'orders'),{
+        user: auth.currentUser.uid,
+        items,
+        total,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      Cart.clear();
+      Alert.alert('Order placed');
+    }catch(e){ Alert.alert('Error', e.message); }
+    setLoading(false);
+  }
+
+  return (
+    <View style={{flex:1,padding:10}}>
+      <FlatList data={items} keyExtractor={(_,i)=>String(i)} renderItem={({item})=> (
+        <View style={{padding:10,borderBottomWidth:1,borderColor:'#eee'}}>
+          <Text>{item.name} x {item.qty}</Text>
+          <Text>Rs {item.price * item.qty}</Text>
+        </View>
+      )} ListEmptyComponent={<Text>Cart is empty</Text>} />
+
+      <Text style={{fontSize:18,marginTop:10}}>Total: Rs {total}</Text>
+      <Button title={loading ? 'Placing...' : 'Place Order'} onPress={placeOrder} disabled={loading} />
+    </View>
+  )
+}
+```
+
+---
+
+## Admin Panel (Quick idea)
+You can create a simple web admin panel (React) or use Firebase Console to add products. Product document structure example:
+```
+products collection -> document id
+  name: string
+  price: number
+  description: string
+  image: string (URL)
+  stock: number
+```
+
+Add products using Firebase Console or build a small React admin to upload images to Storage and save document in Firestore.
+
+---
+
+## Next steps & Notes (Urdu)
+- Payment integration: For Pakistan integrate JazzCash/EasyPaisa via their merchant APIs; as a simpler alternative use Stripe (international) or Cash-on-Delivery for quick launch.
+- Improve cart: Use React Context or Redux and persist cart to AsyncStorage.
+- Orders: Add status updates and admin order dashboard.
+- UX: Add search, categories, filters, and push notifications.
+- Security: Use Firestore rules to allow only authenticated users to create orders, and admin-only privileges to manage products.
+
+
+---
+
+Agar aap chahen to main agla qadam kar dunga: a) Firebase config ko fill karke main app ko chalane layak bana dun, b) Admin panel ka frontend likh dun, ya c) Flutter version do. Bataiye konsa chahenge.
 
